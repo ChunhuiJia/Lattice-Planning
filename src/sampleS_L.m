@@ -1,7 +1,7 @@
 clc,clear;
 s1_sample = [20,40,60,80];
-l0_dot = 0;
-l0_dot_dot = 0;
+l0_dot = -0.1;
+l0_dot_dot = -0.2;
 l0=[0,l0_dot,l0_dot_dot];
 l1_sample = [-0.5,0,0.5];
 for i=1:length(s1_sample)
