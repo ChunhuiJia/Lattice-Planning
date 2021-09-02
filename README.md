@@ -2,3 +2,6 @@
 TEST
 关于从2021年8月14号开始，通过命令行git push提交不上，只能用token提交的问题：[git push报错，必须用token提交的方法](https://blog.csdn.net/weixin_41010198/article/details/119698015)
 增加了matlab2020b增加的使用lattice planning的源码HighwayTrajectoryPlanningUsingFrenetReferencePathExample，后续进行学习时添加相关备注和学习文档
+大体花了几天看了一遍代码，还是比较复杂的，但是感觉也有很多不太好理解的地方还有一些不太合理的。
+后续把仿真的脉络学习一下，自己往里面写代码实现填充，把matlab当作一个编程和仿真的工具。
+后续一些算法方法往里面填充
