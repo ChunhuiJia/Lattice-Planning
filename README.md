@@ -340,3 +340,234 @@ double NormalizeAngle(const double angle) {
 }
 ```
 
+### 1.3 根据匹配点，计算Frenet坐标系的S-L值
+
+```cpp
+// 3. according to the matched point, compute the init state in Frenet frame.
+  std::array<double, 3> init_s;
+  std::array<double, 3> init_d;
+  ComputeInitFrenetState(matched_point, planning_init_point, &init_s, &init_d);
+
+  ADEBUG << "ReferenceLine and Frenet Conversion Time = "
+         << (Clock::NowInSeconds() - current_time) * 1000;
+  current_time = Clock::NowInSeconds();
+
+  auto ptr_prediction_querier = std::make_shared<PredictionQuerier>(
+      frame->obstacles(), ptr_reference_line);
+```
+
+#### ComputeInitFrenetState():
+
+实现功能：根据参考线上的匹配点把全局笛卡尔坐标系的点转换到Frenet坐标系,转换的s和d，及其一阶和二阶导数，通过ptr_s和ptr_d传出
+
+函数路径：/modules/planning/planner/lattice/lattice_planner.cc
+
+函数解释：
+
+问题：
+
+```cpp
+void ComputeInitFrenetState(const PathPoint& matched_point,
+                            const TrajectoryPoint& cartesian_state,
+                            std::array<double, 3>* ptr_s,
+                            std::array<double, 3>* ptr_d) {
+  CartesianFrenetConverter::cartesian_to_frenet(
+      matched_point.s(), matched_point.x(), matched_point.y(),
+      matched_point.theta(), matched_point.kappa(), matched_point.dkappa(),
+      cartesian_state.path_point().x(), cartesian_state.path_point().y(),
+      cartesian_state.v(), cartesian_state.a(),
+      cartesian_state.path_point().theta(),
+      cartesian_state.path_point().kappa(), ptr_s, ptr_d);
+}
+```
+
+#### CartesianFrenetConverter::cartesian_to_frenet():
+
+实现功能：笛卡尔坐标系转换成Frenet的计算公式,转换完的s和d的各阶导数通过指针ptr_s_condition(s,s'(t),s''(t))和ptr_d_condition(d,d'(s),d''(s))传出.
+
+函数路径：/modules/common/math/cartesian_frenet_conversion.cc
+
+函数解释：参考[cartesionToFrenet_MicrosoftOneNoteOnline.pdf](docs/cartesionToFrenet_MicrosoftOneNoteOnline.pdf)和[cartesian_to_frenet的公式和代码对应分析](src/Apollo_cartesian_to_frenet/ReadMe.md)
+
+问题：
+
+```cpp
+void CartesianFrenetConverter::cartesian_to_frenet(
+    const double rs, const double rx, const double ry, const double rtheta,
+    const double rkappa, const double rdkappa, const double x, const double y,
+    const double v, const double a, const double theta, const double kappa,
+    std::array<double, 3>* const ptr_s_condition,
+    std::array<double, 3>* const ptr_d_condition) {
+  const double dx = x - rx;
+  const double dy = y - ry;
+
+  const double cos_theta_r = std::cos(rtheta);
+  const double sin_theta_r = std::sin(rtheta);
+
+  const double cross_rd_nd = cos_theta_r * dy - sin_theta_r * dx;
+  ptr_d_condition->at(0) =
+      std::copysign(std::sqrt(dx * dx + dy * dy), cross_rd_nd);
+
+  const double delta_theta = theta - rtheta;
+  const double tan_delta_theta = std::tan(delta_theta);
+  const double cos_delta_theta = std::cos(delta_theta);
+
+  const double one_minus_kappa_r_d = 1 - rkappa * ptr_d_condition->at(0);
+  ptr_d_condition->at(1) = one_minus_kappa_r_d * tan_delta_theta;
+
+  const double kappa_r_d_prime =
+      rdkappa * ptr_d_condition->at(0) + rkappa * ptr_d_condition->at(1);
+
+  ptr_d_condition->at(2) =
+      -kappa_r_d_prime * tan_delta_theta +
+      one_minus_kappa_r_d / cos_delta_theta / cos_delta_theta *
+          (kappa * one_minus_kappa_r_d / cos_delta_theta - rkappa);
+
+  ptr_s_condition->at(0) = rs;
+
+  ptr_s_condition->at(1) = v * cos_delta_theta / one_minus_kappa_r_d;
+
+  const double delta_theta_prime =
+      one_minus_kappa_r_d / cos_delta_theta * kappa - rkappa;
+  ptr_s_condition->at(2) =
+      (a * cos_delta_theta -
+       ptr_s_condition->at(1) * ptr_s_condition->at(1) *
+           (ptr_d_condition->at(1) * delta_theta_prime - kappa_r_d_prime)) /
+      one_minus_kappa_r_d;
+}
+```
+
+#### class PredictionQuerier
+
+实现功能：预测查询器
+
+函数路径：/modules/planning/lattice/behavior/prediction_querier.h和.cpp
+
+函数解释：
+
+问题：
+
+```cpp
+class PredictionQuerier {
+ public:
+  PredictionQuerier(const std::vector<const Obstacle*>& obstacles,
+                    const std::shared_ptr<std::vector<common::PathPoint>>&
+                        ptr_reference_line);
+
+  virtual ~PredictionQuerier() = default;
+
+  std::vector<const Obstacle*> GetObstacles() const;
+
+  double ProjectVelocityAlongReferenceLine(const std::string& obstacle_id,
+                                           const double s,
+                                           const double t) const;
+
+ private:
+  std::unordered_map<std::string, const Obstacle*> id_obstacle_map_;
+
+  std::vector<const Obstacle*> obstacles_;
+
+  std::shared_ptr<std::vector<common::PathPoint>> ptr_reference_line_;
+};
+```
+
+#### PredictionQuerier::PredictionQuerier():
+
+实现功能：预测查询器的构造函数，传入障碍物信息和参考线
+
+函数路径：/modules/planning/lattice/behavior/prediction_querier.cpp
+
+函数解释：
+
+- 输入：obstacles，
+- 输入：ptr_reference_line，
+
+问题：
+
+```cpp
+PredictionQuerier::PredictionQuerier(
+    const std::vector<const Obstacle*>& obstacles,
+    const std::shared_ptr<std::vector<common::PathPoint>>& ptr_reference_line)
+    : ptr_reference_line_(ptr_reference_line) {
+  for (const auto ptr_obstacle : obstacles) {
+    if (common::util::InsertIfNotPresent(&id_obstacle_map_, ptr_obstacle->Id(),
+                                         ptr_obstacle)) {
+      obstacles_.push_back(ptr_obstacle);
+    } else {
+      AWARN << "Duplicated obstacle found [" << ptr_obstacle->Id() << "]";
+    }
+  }
+}
+
+```
+
+
+
+> Obstacle,障碍物数据类，感觉有点决策的感觉呢，再学学，信息量比较大。。。。。。。。。。。。。。。。。
+>
+> 类的路径：/modules/planning/common/obstacle.h
+>
+> ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+>
+> 简介：这是一个将Obstacle与其路径属性关联起来的类。障碍物相对于路径的路径属性。s和l是路径属性的例子。
+>
+> 障碍物的决策也和路径相关，决策分为两类：横向决策和纵向决策。
+>
+> 横向决策包括：nudge(轻推，可理解为向一侧稍微挪动)和ignore(忽视)，且优先级是nudge>ignore。
+>
+> 纵向决策包括：stop>yield(让行)>=follow>overtake(超车)>ignore
+>
+> ignore决策优先级最低。
+>
+> ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+>
+> CreateObstacles(const prediction::PredictionObstacles& predictions);
+>
+> 这个函数可以从预测数据中创建障碍，对于每个障碍，最初的预测可能有多个轨迹，但是这个函数会为每个轨迹创造一个障碍
+>
+> ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+>
+> ObjectDecisionType& LateralDecision() const;
+>
+> 返回横向决策（nudge,ignore）
+>
+> ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+>
+> ObjectDecisionType& LongitudinalDecision() const;
+>
+> 返回纵向决策（stop、yield、follow、overtake、ignore）
+
+### 1.4 计算障碍物的s-t图
+
+解析决策并获得规划目标
+
+```cpp
+// 4. parse the decision and get the planning target.
+//1.构建S-T图
+  auto ptr_path_time_graph = std::make_shared<PathTimeGraph>(
+      ptr_prediction_querier->GetObstacles(), *ptr_reference_line,
+      reference_line_info, init_s[0],
+      init_s[0] + FLAGS_speed_lon_decision_horizon, 0.0,
+      FLAGS_trajectory_time_length, init_d);
+//2.获取巡航速度，并设定Lattice巡航车速
+  double speed_limit =
+      reference_line_info->reference_line().GetSpeedLimitFromS(init_s[0]);
+  reference_line_info->SetLatticeCruiseSpeed(speed_limit);
+//3.获取参考线上的规划目标，看看是否有停止点
+  PlanningTarget planning_target = reference_line_info->planning_target();
+  if (planning_target.has_stop_point()) {
+    ADEBUG << "Planning target stop s: " << planning_target.stop_point().s()
+           << "Current ego s: " << init_s[0];
+  }
+
+  ADEBUG << "Decision_Time = "
+         << (Clock::NowInSeconds() - current_time) * 1000;
+  current_time = Clock::NowInSeconds();
+```
+
+> 构建S-T图的代码需要好好看看，这里是比较核心的内容
+
+> reference_line_info->planning_target()是都包含多少中规划目标，看一下
+>
+> reference_line_info包含的函数和信息太多了，另外放一个文档专门将reference line info：[ReferenceLineInfo类介绍](docs/reference_line_info.md)
+

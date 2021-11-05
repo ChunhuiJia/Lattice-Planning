@@ -9,7 +9,7 @@
 ## Cartesian转换到Frenet:
 
 $$
-l=±[(x_x-x_r)^2+(y_x-y_r)^2]   
+l=±[(x_x-x_r)^2+(y_x-y_r)^2]
 $$
 $$
 if[(y-y_r)cos\theta_r)-(x-x_r)sin\theta_r]>0,+,otherwise,-.
