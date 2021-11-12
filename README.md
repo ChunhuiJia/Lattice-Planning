@@ -541,6 +541,18 @@ PredictionQuerier::PredictionQuerier(
 
 解析决策并获得规划目标
 
+//1.构建S-T图
+
+init_s[0]：初状态的s
+
+init_s[0] + FLAGS_speed_lon_decision_horizon: 末状态的s，FLAGS_speed_lon_decision_horizon是规划的纵向长度(apollo中=200m)
+
+0.0: 初状态的t
+
+FLAGS_trajectory_time_length：末状态的t(apollo中=8s)
+
+init_d：初始的d ,d', d''
+
 ```cpp
 // 4. parse the decision and get the planning target.
 //1.构建S-T图
@@ -570,4 +582,14 @@ PredictionQuerier::PredictionQuerier(
 > reference_line_info->planning_target()是都包含多少中规划目标，看一下
 >
 > reference_line_info包含的函数和信息太多了，另外放一个文档专门将reference line info：[ReferenceLineInfo类介绍](docs/reference_line_info.md)
+
+通过高精度地图、感知和预测就可以得到一个障碍物列表，根据障碍物的列表计算st图。
+
+根据静态障碍物和动态障碍物
+
+path_time_graph.cc中设置st图，
+
+SetupObstacles中，判断障碍物是不是虚拟的，是静态障碍物还是动态障碍物
+
+#### PathTimeGraph():[PathTimeGraph比较复杂，单独做一个markdown](docs/PathTimeGraph.md)
 

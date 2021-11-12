@@ -20,15 +20,36 @@
 
 ### ReferenceLineInfo()
 
+函数功能：进行成员变量：参考线、导航信息、车辆信息、上次规划的路径点的赋值
+
+```cpp
+ReferenceLineInfo::ReferenceLineInfo(const common::VehicleState& vehicle_state,
+                                     const TrajectoryPoint& adc_planning_point,
+                                     const ReferenceLine& reference_line,
+                                     const hdmap::RouteSegments& segments)
+    : vehicle_state_(vehicle_state),
+      adc_planning_point_(adc_planning_point),
+      reference_line_(reference_line),
+      lanes_(segments) {}
+```
+
 ### Init()
+
+函数功能：初始化一些什么玩意，有点长，不知道怎么理解，以后再看吧，看起来也比较重要的一个函数
 
 ## 2.public计算类函数
 
 ### AddObstacles()
 
+函数功能：添加多个障碍物吧，看不懂要干什么、。。
+
 ### AddObstacle()
 
+函数功能：增加障碍物到path_decision_，reference_line_等上面的信号，返回的是更完善信息的Obstacle对象
+
 ### SDistanceToDestination()
+
+函数功能：取得终点的s坐标
 
 ```cpp
 double ReferenceLineInfo::SDistanceToDestination() const {
@@ -67,6 +88,8 @@ void AddCost(double cost) { cost_ += cost; }
 
 ### LocateLaneInfo()
 
+函数功能：自车所在车道的信息
+
 ```cpp
 hdmap::LaneInfoConstPtr ReferenceLineInfo::LocateLaneInfo(
     const double s) const {
@@ -82,6 +105,8 @@ hdmap::LaneInfoConstPtr ReferenceLineInfo::LocateLaneInfo(
 ```
 
 ### GetNeighborLaneInfo()
+
+函数功能：获得自车所在车道的邻车道的信息（s,l,width,x,y...）
 
 ```cpp
 bool ReferenceLineInfo::GetNeighborLaneInfo(
@@ -167,7 +192,11 @@ bool ReferenceLineInfo::IsStartFrom(
 
 ### CombinePathAndSpeedProfile()
 
+函数功能：在路径点上添加s、速度、加速度的信息。
+
 brief:通过某种配置将最终结果聚合在一起
+
+使用不同的分辨率来减少数据负载，同时也为控制模块提供足够的数据点。
 
 ```cpp
 bool ReferenceLineInfo::CombinePathAndSpeedProfile(
@@ -224,6 +253,8 @@ brief:如果从当前车辆位置开始而不是从上游规划起始点，则�
 插入规划初始点是一种野蛮的方式，一种优雅的方式是绕过轨迹拼接逻辑，或者使用从轨迹拼接规划初始点来计算最开始的轨迹
 
 问题1：上游规划起始点指的是什么，是车辆当前位置距离上次规划轨迹中最近位置的点或者插值点吗？
+
+函数功能：计算一下规划起始点，包含x,y,heading等
 
 ```cpp
 bool ReferenceLineInfo::AdjustTrajectoryWhichStartsFromCurrentPos(
@@ -452,7 +483,7 @@ void ReferenceLineInfo::SetLatticeStopPoint(const StopPoint& stop_point) {
 
 ### SetLatticeCruiseSpeed()
 
-函数功能：用于Lattice planner的速度规划目标
+函数功能：用于Lattice planner的速度规划目标，从配置文件中读取
 
 ```cpp
 void ReferenceLineInfo::SetLatticeCruiseSpeed(double speed) {
@@ -461,6 +492,8 @@ void ReferenceLineInfo::SetLatticeCruiseSpeed(double speed) {
 ```
 
 ### SetCruiseSpeed()
+
+函数功能：从配置文件中读取默认的巡航速度
 
 ```cpp
 void SetCruiseSpeed(double speed) { cruise_speed_ = speed; }
@@ -475,6 +508,8 @@ void ReferenceLineInfo::SetDrivable(bool drivable) { is_drivable_ = drivable; }
 ```
 
 ### SetJunctionRightOfWay()
+
+函数功能：好像是判断junction_s这个点是不是在junction的overlap范围内，如果是的话，则junction_right_of_way_map_就被置为is_protected
 
 ```cpp
 void ReferenceLineInfo::SetJunctionRightOfWay(const double junction_s,
@@ -496,6 +531,8 @@ void SetOffsetToOtherReferenceLine(const double offset) {
 ```
 
 ### SetCandidatePathBoundaries()
+
+函数功能：candidate是候选人的意思，那这个应该是候选的路径
 
 ```cpp
 void ReferenceLineInfo::SetCandidatePathBoundaries(
@@ -969,6 +1006,8 @@ path_reusable()
 
 ### InitFirstOverlaps()
 
+函数功能：根据FirstOverlap的类型，向CLEAR_AREA,CROSSWALK,PNC_JUNCTION,SIGNAL,STOP_SIGN, YIELD_SIGH 中添加相应的overlap。
+
 ```cpp
 void ReferenceLineInfo::InitFirstOverlaps() {
   const auto& map_path = reference_line_.map_path();
@@ -1107,6 +1146,8 @@ void ReferenceLineInfo::ExportVehicleSignal(
 ```
 
 ### IsIrrelevantObstacle()
+
+函数功能：判断是不是无关紧要的障碍物，怎么判断呢？判断障碍物的注意等级、是不是在自车的后方
 
 ```cpp
 bool ReferenceLineInfo::IsIrrelevantObstacle(const Obstacle& obstacle) {
@@ -1298,6 +1339,8 @@ bool ReferenceLineInfo::AddObstacleHelper(
 ```
 
 ### GetFirstOverlap()
+
+函数功能：从多个path_overlaps找出离自车最近的一个overlap吧。
 
 ```cpp
 bool ReferenceLineInfo::GetFirstOverlap(

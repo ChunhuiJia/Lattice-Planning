@@ -20,6 +20,8 @@ ignore决策优先级最低。
 
 ### Obstacle()
 
+函数功能：这个构造函数只输入感知得到的障碍物信息
+
 ```cpp
 Obstacle::Obstacle(const std::string& id,
                    const PerceptionObstacle& perception_obstacle,
@@ -57,7 +59,14 @@ Obstacle::Obstacle(const std::string& id,
 }
 ```
 
+> 构造函数初始化成员变量，可以使用单" : "，
+>
+> 如  : id_(id),
+>       perception_id_(perception_obstacle.id()),
+
 ### Obstacle()
+
+函数功能：这个构造函数除了输入感知得到的障碍物信息，还加入了预测的障碍物轨迹
 
 ```cpp
 Obstacle::Obstacle(const std::string& id,
@@ -90,6 +99,8 @@ Obstacle::Obstacle(const std::string& id,
 ## 2.public计算类函数
 
 ### GetPointAtTime() 
+
+函数功能：给定一个相对时间relative_time，在障碍物预测轨迹trajectory_中找到这个时间对应的障碍物的状态（通过线性插值方法）
 
 ```cpp
 common::TrajectoryPoint Obstacle::GetPointAtTime(
@@ -130,6 +141,10 @@ common::TrajectoryPoint Obstacle::GetPointAtTime(
 
 ### GetBoundingBox()
 
+函数功能：把轨迹点格式转换成Box2d(bounding box)格式
+
+轨迹点格式比较复杂
+
 ```cpp
 common::math::Box2d Obstacle::GetBoundingBox(
     const common::TrajectoryPoint& point) const {
@@ -140,9 +155,11 @@ common::math::Box2d Obstacle::GetBoundingBox(
 }
 ```
 
-
-
 ### CreateObstacles()
+
+函数功能：创建动态带预测轨迹的障碍物用这个
+
+把预测的障碍物轨迹存储成std::list<<std::unique_ptr<**Obstacle**>>>格式，方便后续使用，Obstacle格式就是这个markdown文件所描述的成员变量。
 
 brief:这是一个辅助函数，可以从预测数据中创建障碍物，对于每个障碍物，原始预测可能有多个轨迹，这个函数会为每个轨迹创建一个障碍物。
 
@@ -197,6 +214,8 @@ std::list<std::unique_ptr<Obstacle>> Obstacle::CreateObstacles(
 
 ### CreateStaticVirtualObstacles()
 
+函数功能：创建静态虚拟的障碍物用这个
+
 ```cpp
 std::unique_ptr<Obstacle> Obstacle::CreateStaticVirtualObstacles(
     const std::string& id, const common::math::Box2d& obstacle_box) {
@@ -235,6 +254,8 @@ std::unique_ptr<Obstacle> Obstacle::CreateStaticVirtualObstacles(
 
 ### IsValidPerceptionObstacle()
 
+函数功能：判断感知的障碍物是否是有效的，length,width,height,velocity.x,velocity.y,(x,y)判断是否正常
+
 ```cpp
 bool Obstacle::IsValidPerceptionObstacle(const PerceptionObstacle& obstacle) {
   if (obstacle.length() <= 0.0) {
@@ -269,6 +290,8 @@ bool Obstacle::IsValidPerceptionObstacle(const PerceptionObstacle& obstacle) {
 
 ### IsValidTrajectoryPoint()
 
+函数功能：检查轨迹点是否正常
+
 ```cpp
 bool Obstacle::IsValidTrajectoryPoint(const common::TrajectoryPoint& point) {
   return !((!point.has_path_point()) || std::isnan(point.path_point().x()) ||
@@ -284,6 +307,8 @@ bool Obstacle::IsValidTrajectoryPoint(const common::TrajectoryPoint& point) {
 
 ### IsValidObstacle()
 
+函数功能：检查障碍物的宽度、高度是否正常
+
 ```cpp
 bool Obstacle::IsValidObstacle(
     const perception::PerceptionObstacle& perception_obstacle) {
@@ -298,6 +323,8 @@ bool Obstacle::IsValidObstacle(
 ```
 
 ### MinRadiusStopDistance()
+
+函数功能：计算停止距离，没看懂是怎么算的，可能不算这个影响也不大吧。。。
 
 brief:使用ADC的最小转弯半径计算与障碍物的停止距离
 
@@ -327,6 +354,8 @@ double Obstacle::MinRadiusStopDistance(
 ```
 
 ### BuildReferenceLineStBoundary()
+
+函数功能：为了填充reference_line_st_boundary_的内容，不知道是代表的什么含义。。。
 
 ```cpp
 void Obstacle::BuildReferenceLineStBoundary(const ReferenceLine& reference_line,
@@ -365,6 +394,12 @@ void Obstacle::BuildReferenceLineStBoundary(const ReferenceLine& reference_line,
 ```
 
 ### CheckLaneBlocking()
+
+函数功能：检查车道是否被堵住
+
+如果不是静态障碍物，则车道没有被堵住
+
+如果是静态障碍物，则检查障碍物的s和l，看看剩余车道宽度，能不能通过nudge的方式通过，如果能通过车道就没有被这个障碍物堵住，如果宽度不够，那这条车道就被障碍物堵住了
 
 ```cpp
 void Obstacle::CheckLaneBlocking(const ReferenceLine& reference_line) {
@@ -408,6 +443,8 @@ void SetId(const std::string& id) { id_ = id; }
 
 ### AddLongitudinalDecision()
 
+函数功能：应该是在外部计算这种障碍物触发了哪种条件，如果满足哪种决策，则添加该障碍物的决策，之后在通过MergeDecision决定用哪种决策
+
 ```cpp
 void Obstacle::AddLongitudinalDecision(const std::string& decider_tag,
                                        const ObjectDecisionType& decision) {
@@ -427,6 +464,8 @@ void Obstacle::AddLongitudinalDecision(const std::string& decider_tag,
 
 ### AddLateralDecision()
 
+函数功能：应该是在外部计算这种障碍物触发了哪种条件，如果满足哪种决策，则添加该障碍物的决策，之后在通过MergeDecision决定用哪种决策
+
 ```cpp
 void Obstacle::AddLateralDecision(const std::string& decider_tag,
                                   const ObjectDecisionType& decision) {
@@ -445,6 +484,8 @@ void Obstacle::AddLateralDecision(const std::string& decider_tag,
 
 ### set_path_st_boundary()
 
+函数功能：设置st_boundary的类型，类型包括unknown,stop,follow,yield,overtake,keep_clear，唉，真是复杂啊，还没有啥文档解释，真生气
+
 ```cpp
 void Obstacle::set_path_st_boundary(const STBoundary& boundary) {
   path_st_boundary_ = boundary;
@@ -461,6 +502,8 @@ void Obstacle::SetStBoundaryType(const STBoundary::BoundaryType type) {
 ```
 
 ### EraseStBoundary()
+
+函数功能：清除 path_st_boundary_的信息
 
 ```cpp
 void Obstacle::EraseStBoundary() { path_st_boundary_ = STBoundary(); }
@@ -492,6 +535,8 @@ void Obstacle::EraseReferenceLineStBoundary() {
 ```
 
 ### SetPerceptionSlBoundary()
+
+函数功能：设置sl_boundary
 
 ```cpp
 void Obstacle::SetPerceptionSlBoundary(const SLBoundary& sl_boundary) {
@@ -782,6 +827,10 @@ bool IsLaneChangeBlocking() const { return is_lane_change_blocking_; }
 
 ### MergeLongitudinalDecision()
 
+函数功能：返回障碍物的纵向觉得，lhs和rhs代表的是什么？左、右障碍物吗？
+
+好像是一个障碍物可以有好几种处理的决策，然后根据优先级或者规则，决定优先采取哪种决策方法
+
 ```cpp
 ObjectDecisionType Obstacle::MergeLongitudinalDecision(
     const ObjectDecisionType& lhs, const ObjectDecisionType& rhs) {
@@ -821,6 +870,8 @@ ObjectDecisionType Obstacle::MergeLongitudinalDecision(
 
 ### MergeLateralDecision()
 
+函数功能：好像是一个障碍物可以有好几种处理的决策，然后根据优先级或者规则，决定优先采取哪种决策方法
+
 ```cpp
 ObjectDecisionType Obstacle::MergeLateralDecision(
     const ObjectDecisionType& lhs, const ObjectDecisionType& rhs) {
@@ -858,6 +909,8 @@ ObjectDecisionType Obstacle::MergeLateralDecision(
 ```
 
 ### BuildTrajectoryStBoundary()
+
+函数功能：好像是要根据参考线，自车的位置，st图的boundary，计算预测的障碍物轨迹的St图，st图的形式是什么样的呢？好像是赋予start_s和end_s吧和low_t,high_t吧，太多了，看着真费劲。。。
 
 ```cpp
 bool Obstacle::BuildTrajectoryStBoundary(const ReferenceLine& reference_line,
