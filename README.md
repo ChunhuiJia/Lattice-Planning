@@ -120,7 +120,7 @@ std::vector<PathPoint> ToDiscretizedReferenceLine(
 >
 > 参考链接：[c++ 之 std::move 原理实现与用法总结](https://blog.csdn.net/p942005405/article/details/84644069/)
 
-### 1.2在参考线上计算匹配点
+### 1.2 在参考线上计算匹配点
 
 完成的功能：在初始化的参考线上计算匹配点
 
@@ -583,7 +583,7 @@ init_d：初始的d ,d', d''
 >
 > reference_line_info包含的函数和信息太多了，另外放一个文档专门将reference line info：[ReferenceLineInfo类介绍](docs/reference_line_info.md)
 
-通过高精度地图、感知和预测就可以得到一个障碍物列表，根据障碍物的列表计算st图。
+ 通过高精度地图、感知和预测就可以得到一个障碍物列表，根据障碍物的列表计算st图。
 
 根据静态障碍物和动态障碍物
 
@@ -592,4 +592,183 @@ path_time_graph.cc中设置st图，
 SetupObstacles中，判断障碍物是不是虚拟的，是静态障碍物还是动态障碍物
 
 #### PathTimeGraph():[PathTimeGraph比较复杂，单独做一个markdown](docs/PathTimeGraph.md)
+
+### 1.5 生成横纵向采样路径
+
+init_s: [s0,s'0,s''0]
+
+init_d: [d0, d'0, d''0]
+
+ptr_path_time_graph: 前面的用静态障碍物和动态障碍物创建的st图
+
+ptr_prediction_querier: ???为什么还有一个预测的，st图建立的时候不是考虑了预测的障碍物轨迹了吗？？》？
+
+通过构造函数赋值init_s,init_d,ptr_path_time_graph,ptr_prediction_querier
+
+和GenerateTrajectoryBundles()生成横纵向轨迹簇
+
+```cpp
+// 5. generate 1d trajectory bundle for longitudinal and lateral respectively.
+  Trajectory1dGenerator trajectory1d_generator(
+      init_s, init_d, ptr_path_time_graph, ptr_prediction_querier);
+  std::vector<std::shared_ptr<Curve1d>> lon_trajectory1d_bundle;
+  std::vector<std::shared_ptr<Curve1d>> lat_trajectory1d_bundle;
+  trajectory1d_generator.GenerateTrajectoryBundles(
+      planning_target, &lon_trajectory1d_bundle, &lat_trajectory1d_bundle);
+
+  ADEBUG << "Trajectory_Generation_Time = "
+         << (Clock::NowInSeconds() - current_time) * 1000;
+  current_time = Clock::NowInSeconds();
+```
+
+#### Trajectory1dGenerator()构造函数
+
+```cpp
+Trajectory1dGenerator::Trajectory1dGenerator(
+    const State& lon_init_state, const State& lat_init_state,
+    std::shared_ptr<PathTimeGraph> ptr_path_time_graph,
+    std::shared_ptr<PredictionQuerier> ptr_prediction_querier)
+    : init_lon_state_(lon_init_state),
+      init_lat_state_(lat_init_state),
+      end_condition_sampler_(lon_init_state, lat_init_state,
+                             ptr_path_time_graph, ptr_prediction_querier),
+      ptr_path_time_graph_(ptr_path_time_graph) {}
+```
+
+#### GenerateTrajectoryBundles()
+
+函数功能：生成横纵向轨迹簇
+
+```cpp
+void Trajectory1dGenerator::GenerateTrajectoryBundles(
+    const PlanningTarget& planning_target,
+    Trajectory1DBundle* ptr_lon_trajectory_bundle,
+    Trajectory1DBundle* ptr_lat_trajectory_bundle) {
+  GenerateLongitudinalTrajectoryBundle(planning_target,
+                                       ptr_lon_trajectory_bundle);
+
+  GenerateLateralTrajectoryBundle(ptr_lat_trajectory_bundle);
+}
+```
+
+#### GenerateLongitudinalTrajectoryBundle()
+
+```cpp
+void Trajectory1dGenerator::GenerateLongitudinalTrajectoryBundle(
+    const PlanningTarget& planning_target,
+    Trajectory1DBundle* ptr_lon_trajectory_bundle) const {
+  // cruising trajectories are planned regardlessly.
+  GenerateSpeedProfilesForCruising(planning_target.cruise_speed(),
+                                   ptr_lon_trajectory_bundle);
+
+  GenerateSpeedProfilesForPathTimeObstacles(ptr_lon_trajectory_bundle);
+
+  if (planning_target.has_stop_point()) {
+    GenerateSpeedProfilesForStopping(planning_target.stop_point().s(),
+                                     ptr_lon_trajectory_bundle);
+  }
+}
+```
+
+#### GenerateSpeedProfilesForCruising()
+
+```cpp
+void Trajectory1dGenerator::GenerateSpeedProfilesForCruising(
+    const double target_speed,
+    Trajectory1DBundle* ptr_lon_trajectory_bundle) const {
+  ADEBUG << "cruise speed is  " << target_speed;
+  auto end_conditions =
+      end_condition_sampler_.SampleLonEndConditionsForCruising(target_speed);
+  if (end_conditions.empty()) {
+    return;
+  }
+
+  // For the cruising case, We use the "QuarticPolynomialCurve1d" class (not the
+  // "QuinticPolynomialCurve1d" class) to generate curves. Therefore, we can't
+  // invoke the common function to generate trajectory bundles.
+    //这个4是四次多项式
+  GenerateTrajectory1DBundle<4>(init_lon_state_, end_conditions,
+                                ptr_lon_trajectory_bundle);
+}
+```
+
+#### SampleLonEndConditionsForCruising()
+
+```cpp
+std::vector<Condition> EndConditionSampler::SampleLonEndConditionsForCruising(
+    const double ref_cruise_speed) const {
+  CHECK_GT(FLAGS_num_velocity_sample, 1U);
+
+  // time interval is one second plus the last one 0.01
+  static constexpr size_t num_of_time_samples = 9;
+  std::array<double, num_of_time_samples> time_samples;
+  for (size_t i = 1; i < num_of_time_samples; ++i) {
+    auto ratio =
+        static_cast<double>(i) / static_cast<double>(num_of_time_samples - 1);
+    time_samples[i] = FLAGS_trajectory_time_length * ratio;
+  }
+  time_samples[0] = FLAGS_polynomial_minimal_param;
+
+  std::vector<Condition> end_s_conditions;
+  for (const auto& time : time_samples) {
+    double v_upper = std::min(feasible_region_.VUpper(time), ref_cruise_speed);
+    double v_lower = feasible_region_.VLower(time);
+
+    State lower_end_s = {0.0, v_lower, 0.0};
+    end_s_conditions.emplace_back(lower_end_s, time);
+
+    State upper_end_s = {0.0, v_upper, 0.0};
+    end_s_conditions.emplace_back(upper_end_s, time);
+
+    double v_range = v_upper - v_lower;
+    // Number of sample velocities
+    size_t num_of_mid_points =
+        std::min(static_cast<size_t>(FLAGS_num_velocity_sample - 2),
+                 static_cast<size_t>(v_range / FLAGS_min_velocity_sample_gap));
+
+    if (num_of_mid_points > 0) {
+      double velocity_seg =
+          v_range / static_cast<double>(num_of_mid_points + 1);
+      for (size_t i = 1; i <= num_of_mid_points; ++i) {
+        State end_s = {0.0, v_lower + velocity_seg * static_cast<double>(i),
+                       0.0};
+        end_s_conditions.emplace_back(end_s, time);
+      }
+    }
+  }
+  return end_s_conditions;
+}
+```
+
+### 1.6 计算cost值，进行碰撞检测
+
+首先，根据动态约束评估1d轨迹的可行性。
+
+ 其次，评估可行的纵向和横向轨迹对，并根据cost进行排序。
+
+获取碰撞检查器和约束检查器的实例
+
+```CPP
+  // 6. first, evaluate the feasibility of the 1d trajectories according to
+  // dynamic constraints.
+  //   second, evaluate the feasible longitudinal and lateral trajectory pairs
+  //   and sort them according to the cost.
+  TrajectoryEvaluator trajectory_evaluator(
+      init_s, planning_target, lon_trajectory1d_bundle, lat_trajectory1d_bundle,
+      ptr_path_time_graph, ptr_reference_line);
+
+  ADEBUG << "Trajectory_Evaluator_Construction_Time = "
+         << (Clock::NowInSeconds() - current_time) * 1000;
+  current_time = Clock::NowInSeconds();
+
+  ADEBUG << "number of trajectory pairs = "
+         << trajectory_evaluator.num_of_trajectory_pairs()
+         << "  number_lon_traj = " << lon_trajectory1d_bundle.size()
+         << "  number_lat_traj = " << lat_trajectory1d_bundle.size();
+
+  // Get instance of collision checker and constraint checker
+  CollisionChecker collision_checker(frame->obstacles(), init_s[0], init_d[0],
+                                     *ptr_reference_line, reference_line_info,
+                                     ptr_path_time_graph);
+```
 
